@@ -16,6 +16,7 @@ import androidx.camera.core.Preview
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
@@ -23,27 +24,27 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
-import androidx.lifecycle.LifecycleOwner
-import androidx.camera.view.PreviewView
-import androidx.compose.ui.graphics.asImageBitmap
-import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.core.net.toUri
+import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.lifecycleScope
+import androidx.camera.view.PreviewView
 import hr.tvz.android.doodleemoji.ui.theme.DoodleEmojiTheme
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.io.FileInputStream
-import java.io.FileOutputStream
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
 
@@ -80,64 +81,91 @@ class GameActivity : ComponentActivity() {
         val cameraUnlocked = remember { mutableStateOf(false) }
         val secondTimerValue = remember { mutableStateOf(5) }
         val imageUri = remember { mutableStateOf<String?>(null) }
+        val showEmoji = remember { mutableStateOf(false) }
+        val allowCapture = remember { mutableStateOf(true) }
 
         Column(
             modifier = Modifier.fillMaxSize(),
             verticalArrangement = Arrangement.Center,
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Text(text = "Time remaining: ${timerValue.value}", fontSize = 24.sp)
-            Spacer(modifier = Modifier.height(20.dp))
-            Text(
-                text = selectedEmoji.value,
-                fontSize = 50.sp
-            )
-            Spacer(modifier = Modifier.height(20.dp))
-            if (!cameraUnlocked.value) {
+            if (!showEmoji.value) {
+                Text(text = "Draw the emoji!", fontSize = 24.sp)
+                Spacer(modifier = Modifier.height(20.dp))
                 Button(onClick = {
+                    showEmoji.value = true
                     startFirstTimer(timerValue, cameraUnlocked)
                 }) {
                     Text(text = "Start", fontSize = 20.sp)
                 }
             } else {
-                if (imageUri.value == null) {
-                    Text(text = "Capture in: ${secondTimerValue.value}", fontSize = 24.sp)
+                if (!cameraUnlocked.value) {
+                    Text(text = timerValue.value.toString(), fontSize = 48.sp)
                     Spacer(modifier = Modifier.height(20.dp))
-                    Box(modifier = Modifier.fillMaxSize()) {
-                        AndroidView(
-                            factory = { context ->
-                                PreviewView(context).apply {
-                                    this.scaleType = PreviewView.ScaleType.FILL_CENTER
-                                    this.layoutParams = ViewGroup.LayoutParams(
-                                        ViewGroup.LayoutParams.MATCH_PARENT,
-                                        ViewGroup.LayoutParams.MATCH_PARENT
-                                    )
-                                    this.id = R.id.previewView
-                                }
-                            },
+                    Text(
+                        text = selectedEmoji.value,
+                        fontSize = 150.sp
+                    )
+                } else {
+                    if (imageUri.value == null && allowCapture.value) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(top = 16.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(text = secondTimerValue.value.toString(), fontSize = 48.sp, modifier = Modifier.padding(start = 16.dp))
+                            Text(text = selectedEmoji.value, fontSize = 48.sp, modifier = Modifier.padding(end = 16.dp))
+                        }
+                        Text(text = "Quick! Take a picture of your drawing.", fontSize = 16.sp, modifier = Modifier.padding(16.dp))
+                        Spacer(modifier = Modifier.height(20.dp))
+                        Box(modifier = Modifier.fillMaxSize()) {
+                            AndroidView(
+                                factory = { context ->
+                                    PreviewView(context).apply {
+                                        this.scaleType = PreviewView.ScaleType.FILL_CENTER
+                                        this.layoutParams = ViewGroup.LayoutParams(
+                                            ViewGroup.LayoutParams.MATCH_PARENT,
+                                            ViewGroup.LayoutParams.MATCH_PARENT
+                                        )
+                                        this.id = R.id.previewView
+                                    }
+                                },
+                                modifier = Modifier.fillMaxSize()
+                            )
+                            FloatingActionButton(
+                                onClick = {
+                                    if (allowCapture.value) {
+                                        capturePhoto(context, lifecycleOwner, imageUri, allowCapture)
+                                    }
+                                },
+                                modifier = Modifier
+                                    .align(Alignment.BottomCenter)
+                                    .padding(bottom = 32.dp)
+                                    .size(72.dp)
+                                    .clip(CircleShape),
+                                containerColor = Color.White,
+                                contentColor = Color.Black
+                            ) {}
+                        }
+                        LaunchedEffect(Unit) {
+                            startCamera(context)
+                            startSecondTimer(secondTimerValue, allowCapture)
+                        }
+                    } else if (imageUri.value != null) {
+                        Image(
+                            bitmap = MediaStore.Images.Media.getBitmap(contentResolver, imageUri.value!!.toUri()).asImageBitmap(),
+                            contentDescription = "Captured image",
                             modifier = Modifier.fillMaxSize()
                         )
-                        FloatingActionButton(
-                            onClick = { capturePhoto(context, lifecycleOwner, imageUri) },
-                            modifier = Modifier
-                                .align(Alignment.BottomCenter)
-                                .padding(bottom = 32.dp),
-                            containerColor = Color.White,
-                            contentColor = Color.Black
-                        ) {
-                            Icon(painter = painterResource(id = R.drawable.ic_launcher_foreground), contentDescription = "Capture")
-                        }
+                    } else {
+                        Text(
+                            text = "Try to be quicker next time!",
+                            fontSize = 24.sp,
+                            modifier = Modifier.align(Alignment.CenterHorizontally).padding(top = 200.dp)
+                        )
                     }
-                    LaunchedEffect(Unit) {
-                        startCamera(context)
-                        startSecondTimer(secondTimerValue)
-                    }
-                } else {
-                    Image(
-                        bitmap = MediaStore.Images.Media.getBitmap(contentResolver, imageUri.value!!.toUri()).asImageBitmap(),
-                        contentDescription = "Captured image",
-                        modifier = Modifier.fillMaxSize()
-                    )
                 }
             }
         }
@@ -156,7 +184,7 @@ class GameActivity : ComponentActivity() {
         }.start()
     }
 
-    private fun startSecondTimer(secondTimerValue: MutableState<Int>) {
+    private fun startSecondTimer(secondTimerValue: MutableState<Int>, allowCapture: MutableState<Boolean>) {
         object : CountDownTimer(5000, 1000) {
             override fun onTick(millisUntilFinished: Long) {
                 secondTimerValue.value = (millisUntilFinished / 1000).toInt()
@@ -164,7 +192,7 @@ class GameActivity : ComponentActivity() {
 
             override fun onFinish() {
                 secondTimerValue.value = 0
-                // capturePhoto() is now triggered by the button click
+                allowCapture.value = false
             }
         }.start()
     }
@@ -193,7 +221,7 @@ class GameActivity : ComponentActivity() {
         }, ContextCompat.getMainExecutor(context))
     }
 
-    private fun capturePhoto(context: android.content.Context, lifecycleOwner: LifecycleOwner, imageUri: MutableState<String?>) {
+    private fun capturePhoto(context: android.content.Context, lifecycleOwner: LifecycleOwner, imageUri: MutableState<String?>, allowCapture: MutableState<Boolean>) {
         val photoFile = File(externalMediaDirs.first(), "${System.currentTimeMillis()}.jpg")
         val outputOptions = ImageCapture.OutputFileOptions.Builder(photoFile).build()
 

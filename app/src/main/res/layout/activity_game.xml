@@ -11,7 +11,7 @@
         android:layout_height="wrap_content"
         android:layout_centerHorizontal="true"
         android:layout_marginTop="50dp"
-        android:text="Time remaining: 10"
+        android:text="Draw emoji: 10"
         android:textSize="24sp" />
 
     <ImageView
