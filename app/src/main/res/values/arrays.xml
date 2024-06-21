@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string-array name="models">
+        <item>@raw/doodle_emoji_vgg16_model_80</item>
+        <item>@raw/doodle_emoji_vgg16_model_83</item>
+        <item>@raw/doodle_emoji_vgg16_model_86</item>
+    </string-array>
+</resources>

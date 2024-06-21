@@ -21,6 +21,8 @@
     <string name="almost_there">Almost there, better luck next time!</string>
     <string name="unlucky">That was just unlucky, you\'ll do it next time for sure!</string>
     <string name="keep_trying">Keep trying, you\'ll get it right!</string>
+    <string name="select_model">Select model</string>
+    <string name="cancel">Cancel</string>
 
     <!-- STATISTICS ACTIVITY -->
 </resources>

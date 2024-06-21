@@ -2,6 +2,7 @@ package hr.tvz.android.doodleemoji
 
 import android.Manifest
 import android.content.ContentValues
+import android.content.Context
 import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
@@ -17,8 +18,10 @@ import androidx.camera.core.*
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.view.PreviewView
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
@@ -69,8 +72,12 @@ class GameActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         cameraExecutor = Executors.newSingleThreadExecutor()
 
-        // load TFLite model
-        val tfliteModel = loadModelFile(R.raw.doodle_emoji_vgg16_model_80)
+        // Load the selected model
+        val selectedModel = getSharedPreferences("app_prefs", Context.MODE_PRIVATE)
+            .getString("selected_model", "doodle_emoji_vgg16_model_86.tflite") ?: "doodle_emoji_vgg16_model_86.tflite"
+
+        // Load TFLite model
+        val tfliteModel = loadModelFile(selectedModel)
         tflite = Interpreter(tfliteModel)
 
         setContent {
@@ -84,7 +91,8 @@ class GameActivity : ComponentActivity() {
         }
     }
 
-    private fun loadModelFile(resourceId: Int): ByteBuffer {
+    private fun loadModelFile(modelName: String): ByteBuffer {
+        val resourceId = resources.getIdentifier(modelName.split(".")[0], "raw", packageName)
         val fileDescriptor = resources.openRawResourceFd(resourceId)
         val inputStream = FileInputStream(fileDescriptor.fileDescriptor)
         val fileChannel = inputStream.channel
@@ -113,113 +121,173 @@ class GameActivity : ComponentActivity() {
         val allowCapture = remember { mutableStateOf(true) }
         val capturedBitmap = remember { mutableStateOf<Bitmap?>(null) }
         val modelOutput = remember { mutableStateOf<String?>(null) }
+        val showModelDialog = remember { mutableStateOf(false) }
 
-        Column(
-            modifier = Modifier.fillMaxSize(),
-            verticalArrangement = Arrangement.Center,
-            horizontalAlignment = Alignment.CenterHorizontally
-        ) {
-            if (!showEmoji.value) {
-                Text(text = stringResource(R.string.draw_the_emoji), fontSize = 24.sp)
-                Spacer(modifier = Modifier.height(20.dp))
-                Button(onClick = {
-                    showEmoji.value = true
-                    startFirstTimer(timerValue, cameraUnlocked)
-                }) {
-                    Text(text = stringResource(R.string.start), fontSize = 20.sp)
-                }
-            } else {
-                if (!cameraUnlocked.value) {
-                    Text(text = timerValue.value.toString(), fontSize = 48.sp)
+        if (showModelDialog.value) {
+            ModelSelectionDialog(showDialog = showModelDialog, onModelSelected = { modelName ->
+                // Save selected model
+                context.getSharedPreferences("app_prefs", Context.MODE_PRIVATE).edit()
+                    .putString("selected_model", modelName)
+                    .apply()
+                showModelDialog.value = false
+            })
+        }
+
+        Box(modifier = Modifier.fillMaxSize()) {
+            Column(
+                modifier = Modifier.align(Alignment.Center),
+                verticalArrangement = Arrangement.Center,
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                if (!showEmoji.value) {
+                    Text(text = stringResource(R.string.draw_the_emoji), fontSize = 24.sp)
                     Spacer(modifier = Modifier.height(20.dp))
-                    Text(
-                        text = selectedEmoji.value,
-                        fontSize = 150.sp
-                    )
+                    Button(onClick = {
+                        showEmoji.value = true
+                        startFirstTimer(timerValue, cameraUnlocked)
+                    }) {
+                        Text(text = stringResource(R.string.start), fontSize = 20.sp)
+                    }
                 } else {
-                    if (imageUri.value == null && allowCapture.value) {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(top = 16.dp),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Text(text = secondTimerValue.value.toString(), fontSize = 48.sp, modifier = Modifier.padding(start = 16.dp))
-                            Text(text = selectedEmoji.value, fontSize = 48.sp, modifier = Modifier.padding(end = 16.dp))
-                        }
-                        Text(text = stringResource(R.string.quick_take_picture), fontSize = 16.sp, modifier = Modifier.padding(16.dp))
+                    if (!cameraUnlocked.value) {
+                        Text(text = timerValue.value.toString(), fontSize = 48.sp)
                         Spacer(modifier = Modifier.height(20.dp))
-                        Box(modifier = Modifier
-                            .fillMaxSize()
-                            .aspectRatio(1f)) { // Enforces a square aspect ratio
-                            AndroidView(
-                                factory = { context ->
-                                    PreviewView(context).apply {
-                                        this.scaleType = PreviewView.ScaleType.FILL_CENTER
-                                        this.layoutParams = ViewGroup.LayoutParams(
-                                            ViewGroup.LayoutParams.MATCH_PARENT,
-                                            ViewGroup.LayoutParams.MATCH_PARENT
-                                        )
-                                        this.id = R.id.previewView
-                                    }
-                                },
-                                modifier = Modifier.fillMaxSize()
-                            )
-                            FloatingActionButton(
-                                onClick = {
-                                    if (allowCapture.value) {
-                                        capturePhoto(context, lifecycleOwner, imageUri, allowCapture, capturedBitmap, modelOutput)
-                                    }
-                                },
-                                modifier = Modifier
-                                    .align(Alignment.BottomCenter)
-                                    .padding(bottom = 32.dp)
-                                    .size(72.dp)
-                                    .clip(CircleShape),
-                                containerColor = Color.White,
-                                contentColor = Color.Black
-                            ) {}
-                        }
-                        LaunchedEffect(Unit) {
-                            startCamera(context)
-                            startSecondTimer(secondTimerValue, allowCapture)
-                        }
-                    } else if (imageUri.value != null) {
-                        Column(
-                            horizontalAlignment = Alignment.CenterHorizontally
-                        ) {
-                            modelOutput.value?.let { output ->
-                                val results = parseModelOutput(output)
-                                Text(
-                                    text = getMessage(results.firstOrNull()?.second ?: 0f, results.firstOrNull()?.first == selectedEmoji.value),
-                                    fontSize = 24.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    textAlign = TextAlign.Center,
-                                    color = Color.Black,
-                                    modifier = Modifier.padding(16.dp)
-                                )
-                                capturedBitmap.value?.let {
-                                    Image(
-                                        painter = BitmapPainter(it.asImageBitmap()),
-                                        contentDescription = "Captured image",
-                                        modifier = Modifier.size(256.dp)
-                                    )
-                                }
-                                Spacer(modifier = Modifier.height(16.dp))
-                                displayResults(results)
-                            }
-                        }
-                    } else {
                         Text(
-                            text = stringResource(R.string.try_quicker_next_time),
-                            fontSize = 24.sp,
-                            modifier = Modifier.align(Alignment.CenterHorizontally).padding(top = 200.dp)
+                            text = selectedEmoji.value,
+                            fontSize = 150.sp
                         )
+                    } else {
+                        if (imageUri.value == null && allowCapture.value) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(top = 16.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(text = secondTimerValue.value.toString(), fontSize = 48.sp, modifier = Modifier.padding(start = 16.dp))
+                                Text(text = selectedEmoji.value, fontSize = 48.sp, modifier = Modifier.padding(end = 16.dp))
+                            }
+                            Text(text = stringResource(R.string.quick_take_picture), fontSize = 16.sp, modifier = Modifier.padding(16.dp))
+                            Spacer(modifier = Modifier.height(20.dp))
+                            Box(modifier = Modifier
+                                .fillMaxSize()
+                                .aspectRatio(1f)) { // Enforces a square aspect ratio
+                                AndroidView(
+                                    factory = { context ->
+                                        PreviewView(context).apply {
+                                            this.scaleType = PreviewView.ScaleType.FILL_CENTER
+                                            this.layoutParams = ViewGroup.LayoutParams(
+                                                ViewGroup.LayoutParams.MATCH_PARENT,
+                                                ViewGroup.LayoutParams.MATCH_PARENT
+                                            )
+                                            this.id = R.id.previewView
+                                        }
+                                    },
+                                    modifier = Modifier.fillMaxSize()
+                                )
+                                FloatingActionButton(
+                                    onClick = {
+                                        if (allowCapture.value) {
+                                            capturePhoto(context, lifecycleOwner, imageUri, allowCapture, capturedBitmap, modelOutput)
+                                        }
+                                    },
+                                    modifier = Modifier
+                                        .align(Alignment.BottomCenter)
+                                        .padding(bottom = 32.dp)
+                                        .size(72.dp)
+                                        .clip(CircleShape),
+                                    containerColor = Color.White,
+                                    contentColor = Color.Black
+                                ) {}
+                            }
+                            LaunchedEffect(Unit) {
+                                startCamera(context)
+                                startSecondTimer(secondTimerValue, allowCapture)
+                            }
+                        } else if (imageUri.value != null) {
+                            Column(
+                                horizontalAlignment = Alignment.CenterHorizontally
+                            ) {
+                                modelOutput.value?.let { output ->
+                                    val results = parseModelOutput(output)
+                                    Text(
+                                        text = getMessage(results.firstOrNull()?.second ?: 0f, results.firstOrNull()?.first == selectedEmoji.value),
+                                        fontSize = 24.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        textAlign = TextAlign.Center,
+                                        color = Color.Black,
+                                        modifier = Modifier.padding(16.dp)
+                                    )
+                                    capturedBitmap.value?.let {
+                                        Image(
+                                            painter = BitmapPainter(it.asImageBitmap()),
+                                            contentDescription = "Captured image",
+                                            modifier = Modifier.size(256.dp)
+                                        )
+                                    }
+                                    Spacer(modifier = Modifier.height(16.dp))
+                                    displayResults(results)
+                                }
+                            }
+                        } else {
+                            Text(
+                                text = stringResource(R.string.try_quicker_next_time),
+                                fontSize = 24.sp,
+                                modifier = Modifier.align(Alignment.CenterHorizontally).padding(top = 200.dp)
+                            )
+                        }
                     }
                 }
             }
+            if (!showEmoji.value) {
+                Icon(
+                    painter = painterResource(R.drawable.ic_settings), // Replace with your settings icon
+                    contentDescription = "Settings",
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .padding(16.dp)
+                        .size(32.dp)
+                        .clickable { showModelDialog.value = true }
+                )
+            }
         }
+    }
+
+    @Composable
+    fun ModelSelectionDialog(showDialog: MutableState<Boolean>, onModelSelected: (String) -> Unit) {
+        val context = LocalContext.current
+        val rawResources = context.resources.obtainTypedArray(R.array.models)
+        val modelFiles = (0 until rawResources.length()).map { index ->
+            context.resources.getResourceEntryName(rawResources.getResourceId(index, 0))
+        }
+        rawResources.recycle()
+
+        AlertDialog(
+            onDismissRequest = { showDialog.value = false },
+            title = { Text(text = stringResource(R.string.select_model)) },
+            text = {
+                Column {
+                    modelFiles.forEach { model ->
+                        Text(
+                            text = model,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(8.dp)
+                                .clickable {
+                                    onModelSelected(model)
+                                    showDialog.value = false
+                                }
+                        )
+                    }
+                }
+            },
+            confirmButton = {
+                Button(onClick = { showDialog.value = false }) {
+                    Text(text = stringResource(R.string.cancel))
+                }
+            }
+        )
     }
 
     private fun startFirstTimer(timerValue: MutableState<Int>, cameraUnlocked: MutableState<Boolean>) {
@@ -426,7 +494,6 @@ class GameActivity : ComponentActivity() {
             }
         }
     }
-
 
     companion object {
         private const val REQUEST_CODE_PERMISSIONS = 10
