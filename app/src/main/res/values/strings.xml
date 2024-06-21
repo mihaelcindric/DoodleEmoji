@@ -1,3 +1,28 @@
 <resources>
-    <string name="app_name">DoodleEmoji</string>
+    <string name="app_name">Doodle Emoji</string>
+
+    <!-- MAIN ACTIVITY -->
+    <string name="play">Play</string>
+    <string name="statistics">Stats</string>
+    <string name="exit">Exit</string>
+
+    <!-- GAME ACTIVITY -->
+    <string name="draw_the_emoji">Draw the emoji!</string>
+    <string name="start">Start</string>
+    <string name="quick_take_picture">Quick! Take a picture of your drawing.</string>
+    <string name="try_quicker_next_time">Try to be quicker next time!</string>
+    <string name="amazing">Amazing!!! This was too easy for you!</string>
+    <string name="almost_perfect">Almost perfect! What a talent!</string>
+    <string name="great_job">Great job! Keep it up!</string>
+    <string name="good_attempt">Good attempt, but you can do better!</string>
+    <string name="nice_try">Nice try, but let\'s aim for higher!</string>
+    <string name="not_quite_there">Not quite there. Keep practicing!</string>
+    <string name="come_on_better">Come on, you can do better than that. We believe in you!</string>
+    <string name="almost_there">Almost there, better luck next time!</string>
+    <string name="unlucky">That was just unlucky, you\'ll do it next time for sure!</string>
+    <string name="keep_trying">Keep trying, you\'ll get it right!</string>
+    <string name="select_model">Select model</string>
+    <string name="cancel">Cancel</string>
+
+    <!-- STATISTICS ACTIVITY -->
 </resources>
