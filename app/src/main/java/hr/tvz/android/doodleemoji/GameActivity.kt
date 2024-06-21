@@ -33,6 +33,9 @@ import androidx.compose.ui.graphics.painter.BitmapPainter
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
@@ -66,7 +69,7 @@ class GameActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         cameraExecutor = Executors.newSingleThreadExecutor()
 
-        // Učitaj TFLite model
+        // load TFLite model
         val tfliteModel = loadModelFile(R.raw.doodle_emoji_vgg16_model_80)
         tflite = Interpreter(tfliteModel)
 
@@ -117,13 +120,13 @@ class GameActivity : ComponentActivity() {
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             if (!showEmoji.value) {
-                Text(text = "Draw the emoji!", fontSize = 24.sp)
+                Text(text = stringResource(R.string.draw_the_emoji), fontSize = 24.sp)
                 Spacer(modifier = Modifier.height(20.dp))
                 Button(onClick = {
                     showEmoji.value = true
                     startFirstTimer(timerValue, cameraUnlocked)
                 }) {
-                    Text(text = "Start", fontSize = 20.sp)
+                    Text(text = stringResource(R.string.start), fontSize = 20.sp)
                 }
             } else {
                 if (!cameraUnlocked.value) {
@@ -145,7 +148,7 @@ class GameActivity : ComponentActivity() {
                             Text(text = secondTimerValue.value.toString(), fontSize = 48.sp, modifier = Modifier.padding(start = 16.dp))
                             Text(text = selectedEmoji.value, fontSize = 48.sp, modifier = Modifier.padding(end = 16.dp))
                         }
-                        Text(text = "Quick! Take a picture of your drawing.", fontSize = 16.sp, modifier = Modifier.padding(16.dp))
+                        Text(text = stringResource(R.string.quick_take_picture), fontSize = 16.sp, modifier = Modifier.padding(16.dp))
                         Spacer(modifier = Modifier.height(20.dp))
                         Box(modifier = Modifier
                             .fillMaxSize()
@@ -186,22 +189,30 @@ class GameActivity : ComponentActivity() {
                         Column(
                             horizontalAlignment = Alignment.CenterHorizontally
                         ) {
-                            capturedBitmap.value?.let {
-                                Image(
-                                    painter = BitmapPainter(it.asImageBitmap()),
-                                    contentDescription = "Captured image",
-                                    modifier = Modifier.size(256.dp)
-                                )
-                            }
-                            Spacer(modifier = Modifier.height(16.dp))
                             modelOutput.value?.let { output ->
                                 val results = parseModelOutput(output)
-                                displayResults(results, selectedEmoji.value)
+                                Text(
+                                    text = getMessage(results.firstOrNull()?.second ?: 0f, results.firstOrNull()?.first == selectedEmoji.value),
+                                    fontSize = 24.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    textAlign = TextAlign.Center,
+                                    color = Color.Black,
+                                    modifier = Modifier.padding(16.dp)
+                                )
+                                capturedBitmap.value?.let {
+                                    Image(
+                                        painter = BitmapPainter(it.asImageBitmap()),
+                                        contentDescription = "Captured image",
+                                        modifier = Modifier.size(256.dp)
+                                    )
+                                }
+                                Spacer(modifier = Modifier.height(16.dp))
+                                displayResults(results)
                             }
                         }
                     } else {
                         Text(
-                            text = "Try to be quicker next time!",
+                            text = stringResource(R.string.try_quicker_next_time),
                             fontSize = 24.sp,
                             modifier = Modifier.align(Alignment.CenterHorizontally).padding(top = 200.dp)
                         )
@@ -368,46 +379,54 @@ class GameActivity : ComponentActivity() {
     }
 
     @Composable
-    fun displayResults(results: List<Pair<String, Float>>, selectedEmoji: String) {
-        val primaryResult = results.firstOrNull()
-        val confidence = primaryResult?.second ?: 0f
-        val message = when {
-            primaryResult?.first == selectedEmoji -> when {
-                confidence > 0.85 -> "Amazing!!! This was too easy for you!"
-                confidence > 0.70 -> "Almost perfect! What a talent!"
-                confidence > 0.55 -> "Great job! Keep it up!"
-                confidence > 0.40 -> "Good attempt, but you can do better!"
-                confidence > 0.25 -> "Nice try, but let's aim for higher!"
-                else -> "Not quite there. Keep practicing!"
+    private fun getMessage(confidence: Float, isCorrect: Boolean): String {
+        return if (isCorrect) {
+            when {
+                confidence > 0.85 -> stringResource(R.string.amazing)
+                confidence > 0.70 -> stringResource(R.string.almost_perfect)
+                confidence > 0.55 -> stringResource(R.string.great_job)
+                confidence > 0.40 -> stringResource(R.string.good_attempt)
+                confidence > 0.25 -> stringResource(R.string.nice_try)
+                else -> stringResource(R.string.not_quite_there)
             }
-            else -> when {
-                confidence < 0.15 -> "Come on, you can do better than that. We believe in you!"
-                confidence < 0.30 -> "Almost there, better luck next time!"
-                confidence < 0.50 -> "That was just unlucky, you'll do it next time for sure!"
-                else -> "Keep trying, you'll get it right!"
+        } else {
+            when {
+                confidence < 0.15 -> stringResource(R.string.come_on_better)
+                confidence < 0.30 -> stringResource(R.string.almost_there)
+                confidence < 0.50 -> stringResource(R.string.unlucky)
+                else -> stringResource(R.string.keep_trying)
             }
         }
+    }
 
-        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Text(text = message, fontSize = 24.sp, color = Color.Black)
-            Spacer(modifier = Modifier.height(16.dp))
-            Row(
-                horizontalArrangement = Arrangement.Center,
-                verticalAlignment = Alignment.Bottom
-            ) {
-                results.forEachIndexed { index, result ->
-                    Column(
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        modifier = Modifier.padding(horizontal = 8.dp)
-                    ) {
-                        Text(text = "${result.first}", fontSize = 24.sp)
-                        Spacer(modifier = Modifier.height(8.dp))
-                        Text(text = "${(result.second * 100).toInt()}%", fontSize = 20.sp)
-                    }
+    @Composable
+    fun displayResults(results: List<Pair<String, Float>>) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center,
+            modifier = Modifier.fillMaxWidth().padding(16.dp)
+        ) {
+            results.forEachIndexed { index, result ->
+                val fontSize = when (index) {
+                    0 -> 48.sp // Largest for the first prediction
+                    1 -> 32.sp // Medium for the second prediction
+                    2 -> 24.sp // Smallest for the third prediction
+                    else -> 24.sp
+                }
+                val percentageFontSize = fontSize * 2 / 3
+
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    modifier = Modifier
+                        .padding(vertical = 8.dp)
+                ) {
+                    Text(text = result.first, fontSize = fontSize)
+                    Text(text = "${(result.second * 100).toInt()}%", fontSize = percentageFontSize)
                 }
             }
         }
     }
+
 
     companion object {
         private const val REQUEST_CODE_PERMISSIONS = 10

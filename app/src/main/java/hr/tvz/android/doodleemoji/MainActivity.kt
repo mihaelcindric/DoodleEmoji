@@ -13,6 +13,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import hr.tvz.android.doodleemoji.ui.theme.DoodleEmojiTheme
@@ -43,19 +44,19 @@ class MainActivity : ComponentActivity() {
             Button(onClick = {
                 startActivity(Intent(this@MainActivity, GameActivity::class.java))
             }) {
-                Text(text = "Play", fontSize = 20.sp)
+                Text(text = stringResource(R.string.play), fontSize = 20.sp)
             }
             Spacer(modifier = Modifier.height(20.dp))
             Button(onClick = {
                 startActivity(Intent(this@MainActivity, StatisticsActivity::class.java))
             }) {
-                Text(text = "Statistics", fontSize = 20.sp)
+                Text(text = stringResource(R.string.statistics), fontSize = 20.sp)
             }
             Spacer(modifier = Modifier.height(20.dp))
             Button(onClick = {
                 finish()
             }) {
-                Text(text = "Exit", fontSize = 20.sp)
+                Text(text = stringResource(R.string.exit), fontSize = 20.sp)
             }
         }
     }
