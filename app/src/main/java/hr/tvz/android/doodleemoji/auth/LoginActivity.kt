@@ -65,7 +65,9 @@ class LoginActivity : ComponentActivity() {
                     auth.signInWithEmailAndPassword(usernameOrEmail, password)
                         .addOnCompleteListener(this@LoginActivity) { task ->
                             if (task.isSuccessful) {
-                                startActivity(Intent(this@LoginActivity, MainActivity::class.java))
+                                val intent = Intent(this@LoginActivity, MainActivity::class.java)
+                                intent.flags = Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
+                                startActivity(intent)
                                 finish()
                             } else {
                                 Toast.makeText(this@LoginActivity, R.string.login_failed, Toast.LENGTH_SHORT).show()
@@ -81,7 +83,9 @@ class LoginActivity : ComponentActivity() {
                                 auth.signInWithEmailAndPassword(email, password)
                                     .addOnCompleteListener(this@LoginActivity) { authTask ->
                                         if (authTask.isSuccessful) {
-                                            startActivity(Intent(this@LoginActivity, MainActivity::class.java))
+                                            val intent = Intent(this@LoginActivity, MainActivity::class.java)
+                                            intent.flags = Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
+                                            startActivity(intent)
                                             finish()
                                         } else {
                                             Toast.makeText(this@LoginActivity, R.string.login_failed, Toast.LENGTH_SHORT).show()

@@ -10,6 +10,7 @@
     <string name="logout">Logout</string>
     <string name="user">User</string>
     <string name="logout_confirm">Are you sure you want to logout?</string>
+    <string name="logout_confirm_with_username">Hi %1$s. Are you sure you want to logout?</string>
     <string name="logout_title">Logout</string>
 
     <!-- GAME ACTIVITY -->
