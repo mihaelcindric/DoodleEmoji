@@ -18,9 +18,11 @@ import androidx.camera.core.*
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.view.PreviewView
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.FloatingActionButton
@@ -64,7 +66,6 @@ import java.nio.ByteOrder
 import java.nio.channels.FileChannel
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
-
 
 class GameActivity : ComponentActivity() {
     private lateinit var imageCapture: ImageCapture
@@ -132,7 +133,6 @@ class GameActivity : ComponentActivity() {
 
         if (showModelDialog.value) {
             ModelSelectionDialog(showDialog = showModelDialog, onModelSelected = { modelName ->
-                // Save selected model
                 context.getSharedPreferences("app_prefs", Context.MODE_PRIVATE).edit()
                     .putString("selected_model", modelName)
                     .apply()
@@ -141,23 +141,64 @@ class GameActivity : ComponentActivity() {
         }
 
         Box(modifier = Modifier.fillMaxSize()) {
+            Icon(
+                painter = painterResource(id = R.drawable.ic_exit),
+                contentDescription = stringResource(R.string.exit),
+                modifier = Modifier
+                    .padding(16.dp)
+                    .size(32.dp)
+                    .clickable { finish() }
+                    .align(Alignment.TopStart)
+            )
+
+            if (!showEmoji.value) {
+                Icon(
+                    painter = painterResource(R.drawable.ic_settings),
+                    contentDescription = "Settings",
+                    modifier = Modifier
+                        .padding(16.dp)
+                        .size(32.dp)
+                        .clickable { showModelDialog.value = true }
+                        .align(Alignment.TopEnd)
+                )
+            }
+
             Column(
-                modifier = Modifier.align(Alignment.Center),
+                modifier = Modifier
+                    .align(Alignment.Center)
+                    .padding(top = 56.dp),
                 verticalArrangement = Arrangement.Center,
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 if (!showEmoji.value) {
-                    Text(text = stringResource(R.string.draw_the_emoji), fontSize = 24.sp)
+                    Box(
+                        modifier = Modifier
+                            .background(Color(0xFFBBDEFB), shape = RoundedCornerShape(12.dp))
+                            .padding(16.dp)
+                    ) {
+                        Text(text = stringResource(R.string.draw_the_emoji), fontSize = 24.sp)
+                    }
                     Spacer(modifier = Modifier.height(20.dp))
-                    Button(onClick = {
-                        showEmoji.value = true
-                        startFirstTimer(timerValue, cameraUnlocked)
-                    }) {
-                        Text(text = stringResource(R.string.start), fontSize = 20.sp)
+                    Button(
+                        onClick = {
+                            showEmoji.value = true
+                            startFirstTimer(timerValue, cameraUnlocked)
+                        },
+                        modifier = Modifier
+                            .size(144.dp)
+                            .clip(CircleShape)
+                    ) {
+                        Text(text = stringResource(R.string.start), fontSize = 40.sp)
                     }
                 } else {
                     if (!cameraUnlocked.value) {
-                        Text(text = timerValue.value.toString(), fontSize = 48.sp)
+                        Box(
+                            modifier = Modifier
+                                .background(Color(0xFFBBDEFB), shape = RoundedCornerShape(12.dp))
+                                .padding(16.dp)
+                        ) {
+                            Text(text = timerValue.value.toString(), fontSize = 48.sp)
+                        }
                         Spacer(modifier = Modifier.height(20.dp))
                         Text(
                             text = selectedEmoji.value,
@@ -165,17 +206,40 @@ class GameActivity : ComponentActivity() {
                         )
                     } else {
                         if (imageUri.value == null && allowCapture.value) {
-                            Row(
+                            Box(
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .padding(top = 16.dp),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
+                                contentAlignment = Alignment.TopCenter
                             ) {
-                                Text(text = secondTimerValue.value.toString(), fontSize = 48.sp, modifier = Modifier.padding(start = 16.dp))
-                                Text(text = selectedEmoji.value, fontSize = 48.sp, modifier = Modifier.padding(end = 16.dp))
+                                Box(
+                                    modifier = Modifier
+                                        .background(Color(0xFFBBDEFB), shape = RoundedCornerShape(12.dp))
+                                        .padding(16.dp)
+                                ) {
+                                    Text(text = secondTimerValue.value.toString(), fontSize = 48.sp)
+                                }
                             }
-                            Text(text = stringResource(R.string.quick_take_picture), fontSize = 16.sp, modifier = Modifier.padding(16.dp))
+
+                            Box(
+                                modifier = Modifier
+                                    .padding(16.dp),
+                                contentAlignment = Alignment.TopEnd
+                            ) {
+                                Text(text = selectedEmoji.value, fontSize = 48.sp)
+                            }
+
+                            Box(
+                                modifier = Modifier
+                                    .background(Color(0xFFBBDEFB), shape = RoundedCornerShape(12.dp))
+                                    .padding(8.dp) // Smanjeni padding
+                            ) {
+                                Text(
+                                    text = stringResource(R.string.quick_take_picture),
+                                    fontSize = 16.sp,
+                                    modifier = Modifier.padding(top = 5.dp) // Povećani padding
+                                )
+                            }
                             Spacer(modifier = Modifier.height(20.dp))
                             Box(modifier = Modifier
                                 .fillMaxSize()
@@ -210,7 +274,7 @@ class GameActivity : ComponentActivity() {
                             }
                             LaunchedEffect(Unit) {
                                 startCamera(context)
-                                startSecondTimer(secondTimerValue, allowCapture)
+                                startSecondTimer(secondTimerValue, allowCapture, selectedEmoji.value)
                             }
                         } else if (imageUri.value != null) {
                             Column(
@@ -218,51 +282,44 @@ class GameActivity : ComponentActivity() {
                             ) {
                                 modelOutput.value?.let { output ->
                                     val results = parseModelOutput(output)
-                                    Text(
-                                        text = getMessage(results.firstOrNull()?.second ?: 0f, results.firstOrNull()?.first == selectedEmoji.value),
-                                        fontSize = 24.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        textAlign = TextAlign.Center,
-                                        color = Color.Black,
-                                        modifier = Modifier.padding(16.dp)
+                                    DisplayResultsContainer(
+                                        results = results,
+                                        message = getMessageWithBackground(results.firstOrNull()?.second ?: 0f, results.firstOrNull()?.first == selectedEmoji.value),
+                                        capturedBitmap = capturedBitmap.value,
+                                        onPlayAgainClick = {
+                                            resetGame(selectedEmoji, showEmoji, timerValue, cameraUnlocked, secondTimerValue, imageUri, allowCapture, capturedBitmap, modelOutput)
+                                        }
                                     )
-                                    capturedBitmap.value?.let {
-                                        Image(
-                                            painter = BitmapPainter(it.asImageBitmap()),
-                                            contentDescription = "Captured image",
-                                            modifier = Modifier.size(256.dp)
-                                        )
-                                    }
-                                    Spacer(modifier = Modifier.height(16.dp))
-                                    displayResults(results)
-                                    Spacer(modifier = Modifier.height(20.dp))
-                                    Button(onClick = {
-                                        resetGame(selectedEmoji, showEmoji, timerValue, cameraUnlocked, secondTimerValue, imageUri, allowCapture, capturedBitmap, modelOutput)
-                                    }) {
-                                        Text(text = stringResource(R.string.play_again))
-                                    }
                                 }
                             }
                         } else {
-                            Text(
-                                text = stringResource(R.string.try_quicker_next_time),
-                                fontSize = 24.sp,
-                                modifier = Modifier.align(Alignment.CenterHorizontally).padding(top = 200.dp)
-                            )
+                            Column(
+                                modifier = Modifier.fillMaxSize(),
+                                verticalArrangement = Arrangement.Center,
+                                horizontalAlignment = Alignment.CenterHorizontally
+                            ) {
+                                Text(
+                                    text = stringResource(R.string.try_quicker_next_time),
+                                    fontSize = 24.sp,
+                                    modifier = Modifier
+                                        .background(Color(0xFFBBDEFB), shape = RoundedCornerShape(12.dp))
+                                        .padding(16.dp)
+                                )
+                                Text(
+                                    text = "😵",
+                                    fontSize = 150.sp,
+                                    modifier = Modifier.padding(top = 20.dp)
+                                )
+                                Spacer(modifier = Modifier.height(20.dp))
+                                Button(onClick = {
+                                    resetGame(selectedEmoji, showEmoji, timerValue, cameraUnlocked, secondTimerValue, imageUri, allowCapture, capturedBitmap, modelOutput)
+                                }) {
+                                    Text(text = stringResource(R.string.play_again))
+                                }
+                            }
                         }
                     }
                 }
-            }
-            if (!showEmoji.value) {
-                Icon(
-                    painter = painterResource(R.drawable.ic_settings), // Replace with your settings icon
-                    contentDescription = "Settings",
-                    modifier = Modifier
-                        .align(Alignment.TopEnd)
-                        .padding(16.dp)
-                        .size(32.dp)
-                        .clickable { showModelDialog.value = true }
-                )
             }
         }
     }
@@ -339,7 +396,7 @@ class GameActivity : ComponentActivity() {
         }.start()
     }
 
-    private fun startSecondTimer(secondTimerValue: MutableState<Int>, allowCapture: MutableState<Boolean>) {
+    private fun startSecondTimer(secondTimerValue: MutableState<Int>, allowCapture: MutableState<Boolean>, selectedEmoji: String) {
         object : CountDownTimer(5000, 1000) {
             override fun onTick(millisUntilFinished: Long) {
                 secondTimerValue.value = (millisUntilFinished / 1000).toInt()
@@ -348,6 +405,32 @@ class GameActivity : ComponentActivity() {
             override fun onFinish() {
                 secondTimerValue.value = 0
                 allowCapture.value = false
+
+                val user = auth.currentUser
+                if (user != null) {
+                    val userId = user.uid
+                    val emoji = selectedEmoji
+                    val userRef = database.getReference("users").child(userId).child("stats").child(emoji)
+
+                    userRef.runTransaction(object : Transaction.Handler {
+                        override fun doTransaction(currentData: MutableData): Transaction.Result {
+                            val stats = currentData.getValue(EmojiStats::class.java) ?: EmojiStats()
+                            stats.attempts += 1
+                            currentData.value = stats
+                            return Transaction.success(currentData)
+                        }
+
+                        override fun onComplete(
+                            error: DatabaseError?,
+                            committed: Boolean,
+                            currentData: DataSnapshot?
+                        ) {
+                            if (error != null) {
+                                Log.e("DatabaseError", "Error updating stats: ${error.message}")
+                            }
+                        }
+                    })
+                }
             }
         }.start()
     }
@@ -481,18 +564,21 @@ class GameActivity : ComponentActivity() {
         }
     }
 
-
     private fun updateStats(userId: String, selectedEmoji: String, results: List<Pair<String, Float>>) {
         val userRef = database.getReference("users").child(userId).child("stats").child(selectedEmoji)
 
         userRef.runTransaction(object : Transaction.Handler {
             override fun doTransaction(currentData: MutableData): Transaction.Result {
                 val stats = currentData.getValue(EmojiStats::class.java) ?: EmojiStats()
-                stats.attempts += 1
-                // Provjera je li emoji ispravno prepoznat s dovoljnim povjerenjem
-                if (results.firstOrNull()?.first == selectedEmoji) {
+                // stats.attempts += 1 ---> this is already done with second timer
+
+                // Pronalaženje emojija s najvećom vjerojatnošću
+                val topResult = results.maxByOrNull { it.second }
+                // Ažuriranje broja točnih pokušaja ako je prepoznati emoji jednak ciljanom emojiju
+                if (topResult != null && topResult.first == selectedEmoji) {
                     stats.successes += 1
                 }
+
                 currentData.value = stats
                 return Transaction.success(currentData)
             }
@@ -508,7 +594,6 @@ class GameActivity : ComponentActivity() {
             }
         })
     }
-
 
 
     private fun parseModelOutput(output: String): List<Pair<String, Float>> {
@@ -529,30 +614,79 @@ class GameActivity : ComponentActivity() {
     private fun getMessage(confidence: Float, isCorrect: Boolean): String {
         return if (isCorrect) {
             when {
-                confidence > 0.85 -> stringResource(R.string.amazing)
-                confidence > 0.70 -> stringResource(R.string.almost_perfect)
-                confidence > 0.55 -> stringResource(R.string.great_job)
-                confidence > 0.40 -> stringResource(R.string.good_attempt)
-                confidence > 0.25 -> stringResource(R.string.nice_try)
-                else -> stringResource(R.string.not_quite_there)
+                confidence > 0.85 -> "${stringResource(R.string.amazing)} 🎉"
+                confidence > 0.70 -> "${stringResource(R.string.almost_perfect)} 😊"
+                confidence > 0.55 -> "${stringResource(R.string.great_job)} 😀"
+                confidence > 0.40 -> "${stringResource(R.string.good_attempt)} 🙂"
+                confidence > 0.25 -> "${stringResource(R.string.nice_try)} 😅"
+                else -> "${stringResource(R.string.not_quite_there)} 😕"
             }
         } else {
             when {
-                confidence < 0.15 -> stringResource(R.string.come_on_better)
-                confidence < 0.30 -> stringResource(R.string.almost_there)
-                confidence < 0.50 -> stringResource(R.string.unlucky)
-                else -> stringResource(R.string.keep_trying)
+                confidence < 0.15 -> "${stringResource(R.string.come_on_better)} 💩"
+                confidence < 0.30 -> "${stringResource(R.string.almost_there)} 😬"
+                confidence < 0.50 -> "${stringResource(R.string.unlucky)} 😢"
+                else -> "${stringResource(R.string.keep_trying)} 😐"
             }
         }
     }
 
     @Composable
-    fun displayResults(results: List<Pair<String, Float>>) {
+    private fun getMessageWithBackground(confidence: Float, isCorrect: Boolean): String {
+        return if (isCorrect) {
+            when {
+                confidence > 0.85 -> "${stringResource(R.string.amazing)} 🎉"
+                confidence > 0.70 -> "${stringResource(R.string.almost_perfect)} 😊"
+                confidence > 0.55 -> "${stringResource(R.string.great_job)} 😀"
+                confidence > 0.40 -> "${stringResource(R.string.good_attempt)} 🙂"
+                confidence > 0.25 -> "${stringResource(R.string.nice_try)} 😅"
+                else -> "${stringResource(R.string.not_quite_there)} 😕"
+            }
+        } else {
+            when {
+                confidence < 0.15 -> "${stringResource(R.string.come_on_better)} 💩"
+                confidence < 0.30 -> "${stringResource(R.string.almost_there)} 😬"
+                confidence < 0.50 -> "${stringResource(R.string.unlucky)} 😢"
+                else -> "${stringResource(R.string.keep_trying)} 😐"
+            }
+        }
+    }
+
+    @Composable
+    fun DisplayResultsContainer(results: List<Pair<String, Float>>, message: String, capturedBitmap: Bitmap?, onPlayAgainClick: () -> Unit) {
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.Center,
-            modifier = Modifier.fillMaxWidth().padding(16.dp)
+            verticalArrangement = Arrangement.Top,
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp)
         ) {
+            Box(
+                modifier = Modifier
+                    .background(Color(0xFFBBDEFB), shape = RoundedCornerShape(12.dp))
+                    .padding(8.dp)
+            ) {
+                Text(
+                    text = message,
+                    fontSize = 24.sp,
+                    fontWeight = FontWeight.Bold,
+                    textAlign = TextAlign.Center,
+                    color = Color.Black
+                )
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            capturedBitmap?.let {
+                Image(
+                    painter = BitmapPainter(it.asImageBitmap()),
+                    contentDescription = "Captured image",
+                    modifier = Modifier.size(256.dp)
+                )
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
             results.forEachIndexed { index, result ->
                 val fontSize = when (index) {
                     0 -> 48.sp // Largest for the first prediction
@@ -570,6 +704,15 @@ class GameActivity : ComponentActivity() {
                     Text(text = result.first, fontSize = fontSize)
                     Text(text = "${(result.second * 100).toInt()}%", fontSize = percentageFontSize)
                 }
+            }
+
+            Spacer(modifier = Modifier.height(20.dp))
+
+            Button(
+                onClick = onPlayAgainClick,
+                modifier = Modifier.size(width = 200.dp, height = 56.dp) // Larger button
+            ) {
+                Text(text = stringResource(R.string.play_again))
             }
         }
     }
