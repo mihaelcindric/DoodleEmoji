@@ -47,6 +47,8 @@ import androidx.core.content.ContextCompat
 import androidx.core.net.toUri
 import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.lifecycleScope
+import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.database.*
 import hr.tvz.android.doodleemoji.ui.theme.DoodleEmojiTheme
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -63,14 +65,19 @@ import java.nio.channels.FileChannel
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
 
+
 class GameActivity : ComponentActivity() {
     private lateinit var imageCapture: ImageCapture
     private lateinit var cameraExecutor: ExecutorService
     private lateinit var tflite: Interpreter
+    private lateinit var database: FirebaseDatabase
+    private lateinit var auth: FirebaseAuth
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         cameraExecutor = Executors.newSingleThreadExecutor()
+        auth = FirebaseAuth.getInstance()
+        database = FirebaseDatabase.getInstance("https://doodleemoji-default-rtdb.europe-west1.firebasedatabase.app/")
 
         // Load the selected model
         val selectedModel = getSharedPreferences("app_prefs", Context.MODE_PRIVATE)
@@ -189,7 +196,7 @@ class GameActivity : ComponentActivity() {
                                 FloatingActionButton(
                                     onClick = {
                                         if (allowCapture.value) {
-                                            capturePhoto(context, lifecycleOwner, imageUri, allowCapture, capturedBitmap, modelOutput)
+                                            capturePhoto(context, lifecycleOwner, imageUri, allowCapture, capturedBitmap, modelOutput, selectedEmoji.value)
                                         }
                                     },
                                     modifier = Modifier
@@ -228,6 +235,12 @@ class GameActivity : ComponentActivity() {
                                     }
                                     Spacer(modifier = Modifier.height(16.dp))
                                     displayResults(results)
+                                    Spacer(modifier = Modifier.height(20.dp))
+                                    Button(onClick = {
+                                        resetGame(selectedEmoji, showEmoji, timerValue, cameraUnlocked, secondTimerValue, imageUri, allowCapture, capturedBitmap, modelOutput)
+                                    }) {
+                                        Text(text = stringResource(R.string.play_again))
+                                    }
                                 }
                             }
                         } else {
@@ -252,6 +265,29 @@ class GameActivity : ComponentActivity() {
                 )
             }
         }
+    }
+
+    private fun resetGame(
+        selectedEmoji: MutableState<String>,
+        showEmoji: MutableState<Boolean>,
+        timerValue: MutableState<Int>,
+        cameraUnlocked: MutableState<Boolean>,
+        secondTimerValue: MutableState<Int>,
+        imageUri: MutableState<String?>,
+        allowCapture: MutableState<Boolean>,
+        capturedBitmap: MutableState<Bitmap?>,
+        modelOutput: MutableState<String?>
+    ) {
+        val emojiList = listOf("❤️", "😃", "😍", "😵", "👍")
+        selectedEmoji.value = emojiList.random()
+        showEmoji.value = false
+        timerValue.value = 10
+        cameraUnlocked.value = false
+        secondTimerValue.value = 5
+        imageUri.value = null
+        allowCapture.value = true
+        capturedBitmap.value = null
+        modelOutput.value = null
     }
 
     @Composable
@@ -350,7 +386,8 @@ class GameActivity : ComponentActivity() {
         imageUri: MutableState<String?>,
         allowCapture: MutableState<Boolean>,
         capturedBitmap: MutableState<Bitmap?>,
-        modelOutput: MutableState<String?>
+        modelOutput: MutableState<String?>,
+        selectedEmoji: String
     ) {
         val photoFile = File(externalMediaDirs.first(), "${System.currentTimeMillis()}.jpg")
         val outputOptions = ImageCapture.OutputFileOptions.Builder(photoFile).build()
@@ -378,7 +415,7 @@ class GameActivity : ComponentActivity() {
                                 }
                                 imageUri.value = it.toString()
                                 capturedBitmap.value = rotateBitmapIfNeeded(BitmapFactory.decodeFile(photoFile.absolutePath))
-                                processImageWithModel(capturedBitmap.value, modelOutput)
+                                processImageWithModel(capturedBitmap.value, modelOutput, selectedEmoji)
                             }
                         }
                     }
@@ -397,7 +434,7 @@ class GameActivity : ComponentActivity() {
         return Bitmap.createBitmap(bitmap, 0, 0, bitmap.width, bitmap.height, matrix, true)
     }
 
-    private fun processImageWithModel(bitmap: Bitmap?, modelOutput: MutableState<String?>) {
+    private fun processImageWithModel(bitmap: Bitmap?, modelOutput: MutableState<String?>, selectedEmoji: String) {
         bitmap?.let {
             // Resize and normalize the image to 128x128 for the model
             val resizedBitmap = Bitmap.createScaledBitmap(it, 128, 128, true)
@@ -425,12 +462,54 @@ class GameActivity : ComponentActivity() {
 
                 // Log output for debugging
                 Log.d("ModelOutput", modelOutput.value ?: "No output")
+
+                // Convert output to List<Pair<String, Float>>
+                val emojiList = listOf("❤️", "😃", "😍", "😵", "👍")
+                val results = output.mapIndexed { index, probability ->
+                    emojiList.getOrElse(index) { "?" } to probability
+                }
+
+                // Update stats in the database
+                val user = auth.currentUser
+                if (user != null) {
+                    updateStats(user.uid, selectedEmoji, results)
+                }
             } catch (e: Exception) {
                 Log.e("ModelInference", "Error during model inference", e)
                 modelOutput.value = "Error during model inference"
             }
         }
     }
+
+
+    private fun updateStats(userId: String, selectedEmoji: String, results: List<Pair<String, Float>>) {
+        val userRef = database.getReference("users").child(userId).child("stats").child(selectedEmoji)
+
+        userRef.runTransaction(object : Transaction.Handler {
+            override fun doTransaction(currentData: MutableData): Transaction.Result {
+                val stats = currentData.getValue(EmojiStats::class.java) ?: EmojiStats()
+                stats.attempts += 1
+                // Provjera je li emoji ispravno prepoznat s dovoljnim povjerenjem
+                if (results.firstOrNull()?.first == selectedEmoji) {
+                    stats.successes += 1
+                }
+                currentData.value = stats
+                return Transaction.success(currentData)
+            }
+
+            override fun onComplete(
+                error: DatabaseError?,
+                committed: Boolean,
+                currentData: DataSnapshot?
+            ) {
+                if (error != null) {
+                    Log.e("DatabaseError", "Error updating stats: ${error.message}")
+                }
+            }
+        })
+    }
+
+
 
     private fun parseModelOutput(output: String): List<Pair<String, Float>> {
         val probabilities = output.replace(",", ".").split("; ").mapNotNull {

@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "700240801426",
+    "project_id": "doodleemoji",
+    "storage_bucket": "doodleemoji.appspot.com"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:700240801426:android:0a22753702d1115dcd004b",
+        "android_client_info": {
+          "package_name": "hr.tvz.android.doodleemoji"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCKbZhVEfFYGzQj9EbkHqlA4SKSb29iJNw"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
