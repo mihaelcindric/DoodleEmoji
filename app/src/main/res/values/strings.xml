@@ -5,6 +5,12 @@
     <string name="play">Play</string>
     <string name="statistics">Stats</string>
     <string name="exit">Exit</string>
+    <string name="profile">Profile</string>
+    <string name="login">Log in</string>
+    <string name="logout">Logout</string>
+    <string name="user">User</string>
+    <string name="logout_confirm">Are you sure you want to logout?</string>
+    <string name="logout_title">Logout</string>
 
     <!-- GAME ACTIVITY -->
     <string name="draw_the_emoji">Draw the emoji!</string>
@@ -23,6 +29,27 @@
     <string name="keep_trying">Keep trying, you\'ll get it right!</string>
     <string name="select_model">Select model</string>
     <string name="cancel">Cancel</string>
+    <string name="play_again">Play again</string>
+
+    <!-- LOGIN ACTIVITY -->
+    <string name="login_title">Login</string>
+    <string name="register_here">Don\'t have an account yet? Register here!</string>
+    <string name="email">Email</string>
+    <string name="password">Password</string>
+    <string name="login_button">Login</string>
+    <string name="login_failed">Authentication failed.</string>
+
+    <!-- REGISTER ACTIVITY -->
+    <string name="register_title">Register</string>
+    <string name="username_or_email">Username or email</string>
+    <string name="confirm_password">Confirm Password</string>
+    <string name="register_button">Register</string>
+    <string name="registration_failed">Registration failed.</string>
+    <string name="passwords_do_not_match">Passwords do not match.</string>
+    <string name="username">Username</string>
+    <string name="username_taken">Username is already taken.</string>
 
     <!-- STATISTICS ACTIVITY -->
+    <string name="login_to_view_statistics">Please log in to view your statistics.</string>
+    <string name="loading_statistics">Loading statistics...</string>
 </resources>
