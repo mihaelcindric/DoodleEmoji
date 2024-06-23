@@ -6,17 +6,26 @@ import android.content.Context
 import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.graphics.Canvas
 import android.graphics.Matrix
+import android.graphics.Paint
 import android.os.Bundle
 import android.os.CountDownTimer
+import android.os.Handler
+import android.os.Looper
 import android.provider.MediaStore
 import android.util.Log
+import android.view.View
 import android.view.ViewGroup
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.camera.core.*
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.view.PreviewView
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.*
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -31,6 +40,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
@@ -63,6 +73,7 @@ import java.io.File
 import java.io.FileInputStream
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
+import java.nio.FloatBuffer
 import java.nio.channels.FileChannel
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
@@ -71,6 +82,7 @@ class GameActivity : ComponentActivity() {
     private lateinit var imageCapture: ImageCapture
     private lateinit var cameraExecutor: ExecutorService
     private lateinit var tflite: Interpreter
+    private lateinit var objectDetectionTflite: Interpreter
     private lateinit var database: FirebaseDatabase
     private lateinit var auth: FirebaseAuth
 
@@ -87,6 +99,10 @@ class GameActivity : ComponentActivity() {
         // Load TFLite model
         val tfliteModel = loadModelFile(selectedModel)
         tflite = Interpreter(tfliteModel)
+
+        // Load Object Detection Model
+        val objectDetectionModel = loadModelFile("doodle_emoji_mobilenetv2_object_recognition_78.tflite")
+        objectDetectionTflite = Interpreter(objectDetectionModel)
 
         setContent {
             DoodleEmojiTheme {
@@ -113,6 +129,7 @@ class GameActivity : ComponentActivity() {
         super.onDestroy()
         cameraExecutor.shutdown()
         tflite.close()
+        objectDetectionTflite.close()
     }
 
     @Composable
@@ -498,7 +515,7 @@ class GameActivity : ComponentActivity() {
                                 }
                                 imageUri.value = it.toString()
                                 capturedBitmap.value = rotateBitmapIfNeeded(BitmapFactory.decodeFile(photoFile.absolutePath))
-                                processImageWithModel(capturedBitmap.value, modelOutput, selectedEmoji)
+                                processImageWithModel(capturedBitmap.value, modelOutput, selectedEmoji, capturedBitmap)
                             }
                         }
                     }
@@ -517,7 +534,7 @@ class GameActivity : ComponentActivity() {
         return Bitmap.createBitmap(bitmap, 0, 0, bitmap.width, bitmap.height, matrix, true)
     }
 
-    private fun processImageWithModel(bitmap: Bitmap?, modelOutput: MutableState<String?>, selectedEmoji: String) {
+    private fun processImageWithModel(bitmap: Bitmap?, modelOutput: MutableState<String?>, selectedEmoji: String, capturedBitmap: MutableState<Bitmap?>) {
         bitmap?.let {
             // Resize and normalize the image to 128x128 for the model
             val resizedBitmap = Bitmap.createScaledBitmap(it, 128, 128, true)
@@ -557,12 +574,136 @@ class GameActivity : ComponentActivity() {
                 if (user != null) {
                     updateStats(user.uid, selectedEmoji, results)
                 }
+
+                // Process object detection on the image
+                processObjectDetection(bitmap, results, capturedBitmap)
             } catch (e: Exception) {
                 Log.e("ModelInference", "Error during model inference", e)
                 modelOutput.value = "Error during model inference"
             }
         }
     }
+
+    private fun processObjectDetection(bitmap: Bitmap, results: List<Pair<String, Float>>, capturedBitmap: MutableState<Bitmap?>) {
+        Log.d("ObjectDetection", "Starting object detection")
+
+        // Prepare the bitmap for the object detection model
+        val resizedBitmap = Bitmap.createScaledBitmap(bitmap, 128, 128, true)
+        val tensorImage = TensorImage.fromBitmap(resizedBitmap)
+
+        Log.d("ObjectDetection", "Resized bitmap dimensions: ${resizedBitmap.width}x${resizedBitmap.height}")
+
+        // Normalize the image to [0, 1] range by dividing by 255.0
+        val normalizedBuffer = FloatBuffer.allocate(1 * 128 * 128 * 3)
+        for (y in 0 until resizedBitmap.height) {
+            for (x in 0 until resizedBitmap.width) {
+                val pixel = resizedBitmap.getPixel(x, y)
+                normalizedBuffer.put((pixel shr 16 and 0xFF) / 255.0f)
+                normalizedBuffer.put((pixel shr 8 and 0xFF) / 255.0f)
+                normalizedBuffer.put((pixel and 0xFF) / 255.0f)
+            }
+        }
+        normalizedBuffer.rewind()
+
+        Log.d("ObjectDetection", "Input buffer prepared. FloatBuffer capacity: ${normalizedBuffer.capacity()}")
+
+        // Prepare output buffer
+        val outputLocations = TensorBuffer.createFixedSize(intArrayOf(1, 4), org.tensorflow.lite.DataType.FLOAT32) // Assuming one output tensor for bounding box coordinates
+
+        // Run object detection model inference
+        val outputMap = mapOf(
+            0 to outputLocations.buffer.rewind()
+        )
+
+        try {
+            objectDetectionTflite.runForMultipleInputsOutputs(arrayOf(normalizedBuffer), outputMap)
+            Log.d("ObjectDetection", "Model inference completed")
+
+            // Get the detected objects
+            val detectedLocations = outputLocations.floatArray
+            Log.d("ObjectDetection", "Detected locations: ${detectedLocations.joinToString()}")
+
+            // Use the highest score prediction from the classification model
+            val topResult = results.maxByOrNull { it.second }
+            if (topResult != null) {
+                val topEmoji = topResult.first
+                Log.d("ObjectDetection", "Top emoji: $topEmoji")
+
+                overlayEmojiOnBitmap(bitmap, topEmoji, detectedLocations, capturedBitmap)
+                Log.d("ObjectDetection", "Emoji overlay completed")
+            } else {
+                Log.d("ObjectDetection", "No top result found in classification results")
+            }
+        } catch (e: Exception) {
+            Log.e("ObjectDetection", "Error during object detection inference", e)
+        }
+    }
+
+
+    private fun overlayEmojiOnBitmap(
+        bitmap: Bitmap,
+        emoji: String,
+        location: FloatArray,
+        capturedBitmap: MutableState<Bitmap?>,
+    ) {
+        val mutableBitmap = bitmap.copy(Bitmap.Config.ARGB_8888, true)
+        val canvas = Canvas(mutableBitmap)
+
+        // Skališemo relativne koordinate prema veličini originalne slike
+        val left = location[1] * bitmap.width
+        val top = location[0] * bitmap.height
+        val right = location[3] * bitmap.width
+        val bottom = location[2] * bitmap.height
+
+        // Izračunavanje veličine okvira
+        val boxWidth = right - left
+        val boxHeight = bottom - top
+
+        // Prilagođavanje veličine teksta tako da se uklapa u okvir, ali malo manji od visine okvira
+        val paint = Paint().apply {
+            textSize = boxHeight * 0.8f // Prilagođavanje veličine teksta na 80% visine okvira
+            color = 234
+        }
+
+        // Centriramo emotikon unutar prepoznatog okvira
+        val centerX = left + (boxWidth / 2)
+        val centerY = top + (boxHeight / 2)
+
+        // Prilagođavanje pozicije da emotikon bude centriran
+        val textWidth = paint.measureText(emoji)
+        val textHeight = paint.fontMetrics.descent - paint.fontMetrics.ascent
+        val textX = centerX - (textWidth / 2)
+        val textY = centerY + (textHeight / 2) - (boxHeight * 0.15f) // Pomakni gore za 15% visine okvira
+
+        // Postavite početnu alpha vrijednost na 0
+        paint.alpha = 0
+        canvas.drawText(emoji, textX, textY, paint)
+
+        // Update the bitmap with the overlay
+        capturedBitmap.value = mutableBitmap
+
+        // Animirajte alpha vrijednost od 0 do 255 kroz 2.5 sekunde
+        val handler = Handler(Looper.getMainLooper())
+        val startTime = System.currentTimeMillis()
+        val duration = 2500
+
+        handler.post(object : Runnable {
+            override fun run() {
+                val elapsed = System.currentTimeMillis() - startTime
+                val progress = (elapsed.toFloat() / duration).coerceIn(0f, 1f)
+                paint.alpha = (progress * 255).toInt()
+                val updatedBitmap = bitmap.copy(Bitmap.Config.ARGB_8888, true)
+                val updatedCanvas = Canvas(updatedBitmap)
+                updatedCanvas.drawBitmap(bitmap, 0f, 0f, null)
+                updatedCanvas.drawText(emoji, textX, textY, paint)
+                capturedBitmap.value = updatedBitmap
+                if (progress < 1f) {
+                    handler.postDelayed(this, 16) // Ponovno izvršavanje svakih 16ms
+                }
+            }
+        })
+    }
+
 
     private fun updateStats(userId: String, selectedEmoji: String, results: List<Pair<String, Float>>) {
         val userRef = database.getReference("users").child(userId).child("stats").child(selectedEmoji)
@@ -594,7 +735,6 @@ class GameActivity : ComponentActivity() {
             }
         })
     }
-
 
     private fun parseModelOutput(output: String): List<Pair<String, Float>> {
         val probabilities = output.replace(",", ".").split("; ").mapNotNull {
@@ -654,6 +794,11 @@ class GameActivity : ComponentActivity() {
 
     @Composable
     fun DisplayResultsContainer(results: List<Pair<String, Float>>, message: String, capturedBitmap: Bitmap?, onPlayAgainClick: () -> Unit) {
+        val animatedVisibilityState = remember { mutableStateOf(false) }
+        LaunchedEffect(Unit) {
+            animatedVisibilityState.value = true
+        }
+
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Top,
@@ -687,22 +832,29 @@ class GameActivity : ComponentActivity() {
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            results.forEachIndexed { index, result ->
-                val fontSize = when (index) {
-                    0 -> 48.sp // Largest for the first prediction
-                    1 -> 32.sp // Medium for the second prediction
-                    2 -> 24.sp // Smallest for the third prediction
-                    else -> 24.sp
-                }
-                val percentageFontSize = fontSize * 2 / 3
+            AnimatedVisibility(
+                visible = animatedVisibilityState.value,
+                enter = fadeIn(initialAlpha = 0f, animationSpec = tween(durationMillis = 1000))
+            ) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    results.forEachIndexed { index, result ->
+                        val fontSize = when (index) {
+                            0 -> 48.sp // Largest for the first prediction
+                            1 -> 32.sp // Medium for the second prediction
+                            2 -> 24.sp // Smallest for the third prediction
+                            else -> 24.sp
+                        }
+                        val percentageFontSize = fontSize * 2 / 3
 
-                Column(
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    modifier = Modifier
-                        .padding(vertical = 8.dp)
-                ) {
-                    Text(text = result.first, fontSize = fontSize)
-                    Text(text = "${(result.second * 100).toInt()}%", fontSize = percentageFontSize)
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            modifier = Modifier
+                                .padding(vertical = 8.dp)
+                        ) {
+                            Text(text = result.first, fontSize = fontSize, textAlign = TextAlign.Center)
+                            Text(text = "${(result.second * 100).toInt()}%", fontSize = percentageFontSize, textAlign = TextAlign.Center)
+                        }
+                    }
                 }
             }
 
@@ -716,6 +868,8 @@ class GameActivity : ComponentActivity() {
             }
         }
     }
+
+
 
     companion object {
         private const val REQUEST_CODE_PERMISSIONS = 10
