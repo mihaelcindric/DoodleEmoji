@@ -54,11 +54,11 @@ class MainActivity : ComponentActivity() {
             userRef.addListenerForSingleValueEvent(object : ValueEventListener {
                 override fun onDataChange(snapshot: DataSnapshot) {
                     username = snapshot.child("username").getValue(String::class.java) ?: "User"
-                    showDialog.value = true // Ensure the dialog shows after the username is fetched
+                    showDialog.value = true
                 }
 
                 override fun onCancelled(error: DatabaseError) {
-                    // Handle error if needed
+                    // Handle error
                 }
             })
         }

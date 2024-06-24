@@ -249,12 +249,12 @@ class GameActivity : ComponentActivity() {
                             Box(
                                 modifier = Modifier
                                     .background(Color(0xFFBBDEFB), shape = RoundedCornerShape(12.dp))
-                                    .padding(8.dp) // Smanjeni padding
+                                    .padding(8.dp)
                             ) {
                                 Text(
                                     text = stringResource(R.string.quick_take_picture),
                                     fontSize = 16.sp,
-                                    modifier = Modifier.padding(top = 5.dp) // Povećani padding
+                                    modifier = Modifier.padding(top = 5.dp)
                                 )
                             }
                             Spacer(modifier = Modifier.height(20.dp))
@@ -550,10 +550,8 @@ class GameActivity : ComponentActivity() {
             normalizedTensorImage.buffer.rewind()
             inputBuffer.put(normalizedTensorImage.buffer)
 
-            // Prepare output buffer
             val outputBuffer = TensorBuffer.createFixedSize(intArrayOf(1, 5), org.tensorflow.lite.DataType.FLOAT32)
 
-            // Run model inference
             try {
                 tflite.run(inputBuffer, outputBuffer.buffer.rewind())
                 // Get the output from the model
@@ -563,7 +561,6 @@ class GameActivity : ComponentActivity() {
                 // Log output for debugging
                 Log.d("ModelOutput", modelOutput.value ?: "No output")
 
-                // Convert output to List<Pair<String, Float>>
                 val emojiList = listOf("❤️", "😃", "😍", "😵", "👍")
                 val results = output.mapIndexed { index, probability ->
                     emojiList.getOrElse(index) { "?" } to probability
@@ -713,9 +710,8 @@ class GameActivity : ComponentActivity() {
                 val stats = currentData.getValue(EmojiStats::class.java) ?: EmojiStats()
                 // stats.attempts += 1 ---> this is already done with second timer
 
-                // Pronalaženje emojija s najvećom vjerojatnošću
                 val topResult = results.maxByOrNull { it.second }
-                // Ažuriranje broja točnih pokušaja ako je prepoznati emoji jednak ciljanom emojiju
+
                 if (topResult != null && topResult.first == selectedEmoji) {
                     stats.successes += 1
                 }
@@ -862,7 +858,7 @@ class GameActivity : ComponentActivity() {
 
             Button(
                 onClick = onPlayAgainClick,
-                modifier = Modifier.size(width = 200.dp, height = 56.dp) // Larger button
+                modifier = Modifier.size(width = 200.dp, height = 56.dp)
             ) {
                 Text(text = stringResource(R.string.play_again))
             }
